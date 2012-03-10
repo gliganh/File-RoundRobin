@@ -142,9 +142,13 @@ sub open_file {
         die "You must specify the size of the file!" unless defined $params{size};
         $size = $params{size};
         open($fh,"+>",$params{path}) || die "Cannot open file $params{path}";
-        print $fh $params{size} ."\000";
-        $start_point = length($params{size}) * 2 + 2;
-        print $fh ("0" x (length($params{size}) - length($start_point) )) . $start_point ."\000";
+		#version number
+		print $fh "1"."\x00";
+		#file size
+        print $fh $params{size} ."\x00";
+		#where is the start of the file
+        $start_point = length($params{size}) * 2 + 2 + 2;
+        print $fh ("0" x (length($params{size}) - length($start_point) )) . $start_point ."\x00";
     }
     
     return ($fh,$size,$start_point);

@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 10;
+use Test::More tests => 13;
 
 use_ok("File::RoundRobin");
 
@@ -33,34 +33,23 @@ use_ok("File::RoundRobin");
     
     ok(defined $fh,"File handle created");
     is($size,1000,"Size ok");
-    is($start_point,10,"Start point ok");
+    is($start_point,12,"Start point ok");
     
     close($fh);
     
     open($fh,"<",'test.txt');
     
-    local $/ = undef;
+    local $/ = "\x00";
     
-    my $data = <$fh>;
+    my $version = <$fh>;
+	my $read_size = <$fh>;
+	my $read_start_point = <$fh>;
     
-    is($data,"100000\00010\000",'File content correct');
+    is($version,"1\x00",'File version 1');
+	is($read_size,"1000\x00",'File size 1000');
+	is($read_start_point,"0012\x00",'File start point correct');
     
     unlink("text.txt");
            
 }
 
-{ #open new file
-    
-    my ($fh,$size,$start_point) = File::RoundRobin::open_file(
-                                                path => "test.txt",
-                                                mode => 'new',
-                                                size => '1000'
-                                    );
-    
-    ok(defined $fh,"File handle created");
-    is($size,1000,"Size ok");
-    is($start_point,10,"Start point ok");
-    
-    unlink("text.txt");
-           
-}
