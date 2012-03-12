@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 11;
+use Test::More tests => 15;
 use Data::Dumper;
 
 use_ok("File::RoundRobin");
@@ -56,6 +56,28 @@ use_ok("File::RoundRobin");
 	$buffer = $rrfile->read(100);
 	
 	like($buffer,qr/B{40}C{60}/,"read returned text as expected");
+	
+	unlink('test.txt');
+}
+
+
+{ # create a new file , write something and read it back
+    
+    my $rrfile = File::RoundRobin->new(path => 'test.txt',size => '1k');
+    
+    isa_ok($rrfile,'File::RoundRobin');
+    
+    ok($rrfile->write("foo bar"),'Write successful') ;
+
+	ok($rrfile->seek(-7),'seek works');
+	
+	$rrfile->close();
+	
+	$rrfile = File::RoundRobin->new(path => 'test.txt', mode => 'read');
+	
+	my $buffer = $rrfile->read(1);
+	
+	is($buffer,"f",'read returned text as expected');
 	
 	unlink('test.txt');
 }

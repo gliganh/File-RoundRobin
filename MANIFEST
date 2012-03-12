@@ -1,5 +1,6 @@
 Changes
 lib/File/RoundRobin.pm
+bin/rrcat
 Makefile.PL
 MANIFEST			This list of files
 README

@@ -31,20 +31,132 @@ Example :
 
     use File::RoundRobin;
 
-    my $foo = File::RoundRobin->new(
+    my $rrfile = File::RoundRobin->new(
                                     path => '/tmp/sample.txt',
                                     size => '100M',
                                     mode => 'new'
-                                );
+                       			  );
+
+	$rrfile->print("foo bar");
+	
     or
     
-    my $foo = File::RoundRobin->new(path => '/tmp/sample.txt', mode => 'append');
+    my $rrfile = File::RoundRobin->new(path => '/tmp/sample.txt', mode => 'read');
+
+	while (my $line = $rrfile->readline() ) {
+		print $line;
+	}
+	
+
+
+When you write into the Round-Robin file, if it filled the maximum allowed space it 
+will write over the old data, while always preserving the most recent data.
+
+=head2 TIE INTERFACE
+
+This module implements the TIEHANDLE interface and the objects an be used as normal 
+file handles.
+
+=head3 Write example:
+
+	local *FH;
+	tie *FH, 'File::RoundRobin', path => 'test.txt',size => '10M';
+
+	my $fh = *FH;
+
+	...
+	print $fh "foo bar";
+
+	...
+	close($fh);
+	
+=head3 Read example :
+
+	local *FH;
+	tie *FH, 'File::RoundRobin', path => 'test.txt',mode => 'read';
+
+	$fh = *FH;
+
+	while ( my $line = readline($fh) ) {
+		print $line;
+	}
+	
+	close($fh);
+	
+=head1 UTILITIES
+
+The package comes with a simple utility B<rrcat> that let's you create and read RoundRobin files from command line 
+
+Usage : 
+To print the content of a file :
+	$ rrcat <filename> 
+
+To write into a file (reads from stdin):
+	$ rrcat <size> <filename>
+
+Size can be specified in any of the forms accepted by File::RoundRobin (see C<new> method)
 
 =head1 SUBROUTINES/METHODS
 
 =head2 new
 
-Returns a new filehandle 
+Returns a new File::RoundRobin object.
+
+Files can be opened in three ways: I<new file>, I<read>, I<append>
+
+=head3 New file mode
+
+In I<new file> mode any existing data will be lost and the file will be overwritten
+Arguments :
+
+=over 4 
+
+=item * path = path where to create the file
+
+=item * size = the maximum size the file is allowed to grow to. Example : 100K or 100Kb, 10M or 10Mb, 1G or 1Gb
+
+=back
+
+Example : 
+
+	my $rrfile = File::RoundRobin->new(
+                                    path => '/tmp/sample.txt',
+                                    size => '100M',
+                       			  );
+
+=head3 Read mode
+
+Arguments :
+
+=over 4
+
+=item * path = path where to create the file
+
+=item * mode = must be C<read>
+
+=back
+
+Example :
+
+	my $rrfile = File::RoundRobin->new(path => '/tmp/sample.txt', mode => 'read');
+
+=head3 Append mode
+
+In I<append> mode all existing data will preserved and we can continue writing the file from where we left off
+
+Arguments :
+
+=over 4
+
+=item * path = path where to create the file
+
+=item * mode = must be C<append>
+
+=back
+
+Example :
+
+	my $rrfile = File::RoundRobin->new(path => '/tmp/sample.txt', mode => 'append');
 
 =cut
 
@@ -106,30 +218,39 @@ sub read {
 	my $length = shift || 1;
 	my $offset = shift || 0;
 	
+	if ($self->{_write_start_point_} == $self->{_read_start_point_}) {
+		if (defined $self->{_read_started_}) {
+			return undef;
+		}
+		else {
+			$self->{_read_started_} = 1;
+		}
+	}
+	
 	my $to_eof =  ($self->{_write_start_point_} > $self->{_read_start_point_}) ? 
 						$self->{_write_start_point_} - $self->{_read_start_point_} :
 						($self->{_write_start_point_} - $self->{_headers_size_}) + ($self->{_file_length_} - $self->{_read_start_point_});
-	
+							
 	$length = $to_eof > $length ? $length : $to_eof;
 	
 	return undef unless $length;
-	
+		
 	$self->jump($offset) if ($offset);
-
-	my ($buffer1,$buffer2) = ('','');
 	
-	if ($self->{_read_start_point_} + $length > $self->{_file_length_}) {
-		CORE::read($self->{_fh_},$buffer1,$self->{_file_length_} - $self->{_read_start_point_});
-		$length -= $self->{_file_length_} - $self->{_read_start_point_};
-		$self->{_read_start_point_} = $self->{_headers_size_};
+	my ($buffer1,$buffer2);
+	
+	my $bytes = CORE::read($self->{_fh_},$buffer1,$length);
+	$self->{_read_start_point_} += $bytes;
+	CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
+	
+	if ($bytes < $length) {
+		CORE::seek($self->{_fh_},$self->{_headers_size_},0);
+		$bytes = CORE::read($self->{_fh_},$buffer2,$length - $bytes);
+		$self->{_read_start_point_} = $self->{_headers_size_} + $bytes;
 		CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
 	} 
 	
-	CORE::read($self->{_fh_},$buffer2,$length);
-	$self->{_read_start_point_} = $self->{_headers_size_} + $length;
-	CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
-	
-	return $buffer1 . $buffer2;
+	return $buffer2 ? $buffer1 . $buffer2 : $buffer1;
 }
 
 =head2 write
@@ -225,13 +346,16 @@ sub close {
 
 Return true if you reached the end of file, false otherwise
 
+Usage :
+
+	my $bool = $rrfile->eof();
+
 =cut
 sub eof {
 	my $self = shift;
 	
-	return 1 if ($self->{_write_start_point_} - $self->{_read_start_point_} == 1);
-	return 1 if ($self->{_write_start_point_} == $self->{_headers_size_} && 
-				 $self->{_read_start_point_} == $self->{_file_length_});
+	return 1 if ($self->{_write_start_point_} == $self->{_read_start_point_} && defined $self->{_read_started_} );
+
 	return 0;
 }
 
@@ -482,7 +606,12 @@ sub convert_size {
 }
 
 
-=head1 TIE INTERFACE
+=head1 TIE INTERFACE IMPLEMENTATION
+
+This module implements the TIEHANDLE interface and the objects an be used as normal 
+file handles. 
+
+See SYNOPSYS for more details on this
 
 =cut
 
@@ -503,10 +632,9 @@ sub READLINE {
 	my $self = shift;
 	
 	my $buffer;
-	while (my $char = $self->read(1,0)) {
+	while (my $char = $self->read(1)) {
 		$buffer .= $char;
 		last if ($char =~ /[\n\r]/);
-		last if ($self->eof());
 	}
 	
 	return $buffer;
@@ -539,7 +667,7 @@ sub PRINTF {
 # binmode does nothing, this is a text file
 sub BINMODE {
 	my $self = shift;
-	return 1;
+	CORE::binmode($self->{_fh_},@_);
 }
 
 sub EOF {
@@ -634,8 +762,9 @@ L<http://search.cpan.org/dist/File-RoundRobin/>
 =back
 
 
-=head1 ACKNOWLEDGEMENTS
+=head1 LIMITATIONS 
 
+The module does not support tailing of files as they are written to. 
 
 =head1 LICENSE AND COPYRIGHT
 
