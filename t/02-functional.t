@@ -3,15 +3,59 @@
 use strict;
 use warnings;
 
-use Test::More tests => 10;
+use Test::More tests => 11;
+use Data::Dumper;
 
 use_ok("File::RoundRobin");
 
-{ # create a new file
+{ # create a new file , write something and read it back
     
-    my $rrfile = File::RoundRobin->new(path => '/tmp/test.txt',size => '1k');
+    my $rrfile = File::RoundRobin->new(path => 'test.txt',size => '1k');
     
     isa_ok($rrfile,'File::RoundRobin');
     
+    ok($rrfile->write("foo bar"),'Write successful') ;
+
+	ok($rrfile->seek(-7),'seek works');
+	
+	my $buffer = $rrfile->read(7);
+	
+	is($buffer,"foo bar",'read returned text as expected');
+	
+	unlink('test.txt');
+}
+
+{ # reate a new file, write to it and read back the content
     
+    my $rrfile = File::RoundRobin->new(path => 'test.txt',size => '100');
+
+    isa_ok($rrfile,'File::RoundRobin');
+    
+    ok($rrfile->write("A" x 60),'Write A successful') ;
+	
+	ok($rrfile->write("B" x 60),'Write B successful') ;
+	
+	$rrfile->close();
+	
+	$rrfile = File::RoundRobin->new(path => 'test.txt',mode => 'read');
+	
+	my $buffer = $rrfile->read(100);
+	
+	like($buffer,qr/A{30}B{60}/,'read returned text as expected');
+	
+	$rrfile->close();
+	
+	$rrfile = File::RoundRobin->new(path => 'test.txt',mode => 'append');
+	
+	ok($rrfile->write("C" x 60),'Write C successful') ;
+		
+	$rrfile->close();
+	
+	$rrfile = File::RoundRobin->new(path => 'test.txt',mode => 'read');
+	
+	$buffer = $rrfile->read(100);
+	
+	like($buffer,qr/B{40}C{60}/,"read returned text as expected");
+	
+	unlink('test.txt');
 }
