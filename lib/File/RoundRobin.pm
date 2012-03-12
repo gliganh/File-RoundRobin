@@ -625,7 +625,7 @@ sub READ {
 	
 	my $content = $self->read($length,$offet);
 	$_[1] = $content;
-	return length($content);
+	return length($content || '');
 }
 
 sub READLINE {
