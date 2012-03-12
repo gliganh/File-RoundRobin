@@ -106,8 +106,6 @@ sub read {
 	my $length = shift || 1;
 	my $offset = shift || 0;
 	
-	warn "$length $offset";
-	
 	my $to_eof =  ($self->{_write_start_point_} > $self->{_read_start_point_}) ? 
 						$self->{_write_start_point_} - $self->{_read_start_point_} :
 						($self->{_write_start_point_} - $self->{_headers_size_}) + ($self->{_file_length_} - $self->{_read_start_point_});
@@ -121,19 +119,15 @@ sub read {
 	my ($buffer1,$buffer2) = ('','');
 	
 	if ($self->{_read_start_point_} + $length > $self->{_file_length_}) {
-		$self->{_fh_}->read($buffer1,$self->{_file_length_} - $self->{_read_start_point_});
+		CORE::read($self->{_fh_},$buffer1,$self->{_file_length_} - $self->{_read_start_point_});
 		$length -= $self->{_file_length_} - $self->{_read_start_point_};
 		$self->{_read_start_point_} = $self->{_headers_size_};
 		CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
 	} 
 	
-	warn $length;
-	
-	$self->{_fh_}->read($buffer2,$length);
+	CORE::read($self->{_fh_},$buffer2,$length);
 	$self->{_read_start_point_} = $self->{_headers_size_} + $length;
 	CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
-	
-	warn $buffer1,$buffer2;
 	
 	return $buffer1 . $buffer2;
 }
