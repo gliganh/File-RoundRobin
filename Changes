@@ -1,5 +1,8 @@
 Revision history for File-RoundRobin
 
-0.01    12/03/2010
+0.01    12/03/2012
         First version
-
+0.02	13/03/2012
+		Fixed problem with readding files that are not filled yet
+0.03	13/03/2012
+		Fixed windows test problems
