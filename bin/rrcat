@@ -3,6 +3,15 @@
 use strict;
 use warnings;
 
+our $VERSION = '0.02';
+
+=head1 DESCRIPTION
+
+This script simulates a small part of the linux C<cat> command.
+It's a small utility that helps reading / writing round-robin text files.
+
+=cut
+
 use File::RoundRobin;
 
 if ( $ARGV[0] =~ /^(\d+(?:Kb?|Mb?|Gb?)?)$/ && defined $ARGV[1] ) {
