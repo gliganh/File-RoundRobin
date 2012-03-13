@@ -10,11 +10,11 @@ File::RoundRobin - Round Robin text files
 
 =head1 VERSION
 
-Version 0.01
+Version 0.03
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 
 =head1 SYNOPSIS
@@ -426,6 +426,7 @@ sub open_file {
         die "You must specify the size of the file!" unless defined $params{size};
         $size = $params{size};
         open($fh,"+>",$params{path}) || die "Cannot open file $params{path}";
+		CORE::binmode($fh,":unix");
 		#version number
 		CORE::print $fh "1"."\x00";
 		#file size
@@ -439,11 +440,13 @@ sub open_file {
 	else {
 		if ($params{mode} eq "append") {
 			open($fh,"+<",$params{path}) || die "Cannot open file $params{path}";
+			CORE::binmode($fh,":unix");
 			CORE::seek($fh,0,0);	
 			$read_only = 0;
 		}
 		elsif ($params{mode} eq "read") {
 			open($fh,"<",$params{path}) || die "Cannot open file $params{path}";
+			CORE::binmode($fh,":unix");
 			$read_only = 1;
 		}
 		else {
