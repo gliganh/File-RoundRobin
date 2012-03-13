@@ -178,7 +178,7 @@ sub new {
     die "You must specify the file size" if ($params{mode} eq "new" && ! defined $params{size});
     
     my ($fh,$size,$start_point,$headers_size,$read_only) = open_file(%params);
-    
+        
     my $self = {
                 _fh_ => $fh,
                 _data_length_ => $size,
@@ -232,15 +232,15 @@ sub read {
 			$self->{_read_started_} = 1;
 		}
 	}
-	
+
 	my $to_eof =  ($self->{_write_start_point_} > $self->{_read_start_point_}) ? 
 						$self->{_write_start_point_} - $self->{_read_start_point_} :
 						($self->{_write_start_point_} - $self->{_headers_size_}) + ($self->{_file_length_} - $self->{_read_start_point_});
 							
 	$length = $to_eof > $length ? $length : $to_eof;
-	
+    
 	return undef unless $length;
-		
+
 	$self->jump($offset) if ($offset);
 	
 	my ($buffer1,$buffer2);
@@ -248,14 +248,18 @@ sub read {
 	my $bytes = CORE::read($self->{_fh_},$buffer1,$length);
 	$self->{_read_start_point_} += $bytes;
 	CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
-	
+    	
 	if ($bytes < $length) {
+        $length -= $bytes;
+        if ($self->{_write_start_point_} - $self->{_headers_size_} < $length) {
+            $length = $self->{_write_start_point_} - $self->{_headers_size_};
+        }
 		CORE::seek($self->{_fh_},$self->{_headers_size_},0);
-		$bytes = CORE::read($self->{_fh_},$buffer2,$length - $bytes);
+		$bytes = CORE::read($self->{_fh_},$buffer2,$length);
 		$self->{_read_start_point_} = $self->{_headers_size_} + $bytes;
 		CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
-	} 
-	
+	}
+
 	return $buffer2 ? $buffer1 . $buffer2 : $buffer1;
 }
 
@@ -288,8 +292,9 @@ sub write {
 	
 	die "File is read only!" if $self->{_read_only_};
 	
+    select($self->{_fh_});
 	local $|=1 if $self->{_autoflush_};
-	
+    
 	$self->jump($offset) if $offset;
 	
 	$self->{_write_start_point_} = $self->{_read_start_point_};
