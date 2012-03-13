@@ -7,6 +7,7 @@ README
 t/00-load.t
 t/01-unit.t
 t/02-functional.t
+t/03-tie_interface.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
