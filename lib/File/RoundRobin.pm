@@ -10,12 +10,13 @@ File::RoundRobin - Round Robin text files
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
+local $|=1;
 
 =head1 SYNOPSIS
 
@@ -35,7 +36,6 @@ Example :
                                     path => '/tmp/sample.txt',
                                     size => '100M',
                                     mode => 'new',
-									autoflush => 1,
                        			  );
 
 	$rrfile->print("foo bar");
@@ -90,6 +90,8 @@ file handles.
 	
 =head1 UTILITIES
 
+=head2 rrcat 
+
 The package comes with a simple utility B<rrcat> that let's you create and read RoundRobin files from command line 
 
 Usage : 
@@ -100,6 +102,26 @@ To write into a file (reads from stdin):
 	$ rrcat <size> <filename>
 
 Size can be specified in any of the forms accepted by File::RoundRobin (see C<new> method)
+
+=head2 rrtail
+
+The package comes with a simple utility B<rrtail> that let's you tail RoundRobin files from command line
+
+Usage : 
+To a file you can run :
+
+Print the last 10 lines
+	
+    $ rrtail <filename>
+
+Print the last 100 lines :
+    
+    $ rrtail -n 100 <filename>
+
+Print the content as it's written :    
+
+    $ rrtail -f <filename>    
+    
 
 =head1 SUBROUTINES/METHODS
 
@@ -187,7 +209,7 @@ sub new {
 				_read_start_point_ => $start_point,
 				_headers_size_ => $headers_size,
 				_read_only_ => $read_only,
-				_autoflush_ => $params{autoflush},
+				_autoflush_ => $params{autoflush} || 1,
     };
     
     bless $self, $class;
@@ -225,7 +247,7 @@ sub read {
 	my $offset = shift || 0;
 	
 	if ($self->{_write_start_point_} == $self->{_read_start_point_}) {
-		if (defined $self->{_read_started_}) {
+		if ($self->{_read_started_}) {
 			return undef;
 		}
 		else {
@@ -244,20 +266,20 @@ sub read {
 	$self->jump($offset) if ($offset);
 	
 	my ($buffer1,$buffer2);
-	
-	my $bytes = CORE::read($self->{_fh_},$buffer1,$length);
+    
+	my $bytes = CORE::sysread($self->{_fh_},$buffer1,$length);
 	$self->{_read_start_point_} += $bytes;
-	CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
+	CORE::sysseek($self->{_fh_},$self->{_read_start_point_},0);
     	
 	if ($bytes < $length) {
         $length -= $bytes;
         if ($self->{_write_start_point_} - $self->{_headers_size_} < $length) {
             $length = $self->{_write_start_point_} - $self->{_headers_size_};
         }
-		CORE::seek($self->{_fh_},$self->{_headers_size_},0);
-		$bytes = CORE::read($self->{_fh_},$buffer2,$length);
+		CORE::sysseek($self->{_fh_},$self->{_headers_size_},0);
+		$bytes = CORE::sysread($self->{_fh_},$buffer2,$length);
 		$self->{_read_start_point_} = $self->{_headers_size_} + $bytes;
-		CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
+		CORE::sysseek($self->{_fh_},$self->{_read_start_point_},0);
 	}
 
 	return $buffer2 ? $buffer1 . $buffer2 : $buffer1;
@@ -293,7 +315,6 @@ sub write {
 	die "File is read only!" if $self->{_read_only_};
 	
     select($self->{_fh_});
-	local $|=1 if $self->{_autoflush_};
     
 	$self->jump($offset) if $offset;
 	
@@ -304,20 +325,41 @@ sub write {
 	my $start_pos = 0;
 	while  ($self->{_write_start_point_} + $length > $self->{_file_length_}) {
 		my $bytes_to_write = $self->{_file_length_} - $self->{_write_start_point_};
-		CORE::print $fh substr($buffer,$start_pos,$bytes_to_write);
+		CORE::syswrite($fh,substr($buffer,$start_pos,$bytes_to_write));
 		$start_pos += $bytes_to_write;
 		$length -= $bytes_to_write;
 		$self->{_write_start_point_} = $self->{_headers_size_};
-		CORE::seek($fh,$self->{_write_start_point_},0);
+		CORE::sysseek($fh,$self->{_write_start_point_},0);
 	}
 	
-	CORE::print $fh substr($buffer,$start_pos,$length);
+	CORE::syswrite($fh,substr($buffer,$start_pos,$length));
 	$self->{_write_start_point_} += $length;
 	$self->{_read_start_point_} = $self->{_write_start_point_};
+    
+    $self->update_headers() unless $self->{_autoflush_} == 0;
+    
 	return ($self->{_write_start_point_} == CORE::tell($fh)) ? 1 : 0;
 }
 
 
+=head2 print
+
+Writes the given text into the file
+
+Usage :
+
+	$rrfile->print("foo bar");
+	
+Arguments :
+
+=over 4
+
+=item * I<buffer> = the actual content we want to write    
+
+=back
+
+=cut
+*print = \&write;
 
 
 =head2 close
@@ -337,16 +379,7 @@ sub close {
 	return if $self->{_closed_};
 	
 	if (! $self->{_read_only_}) {
-		CORE::seek($fh,0,0);
-	
-		#jump over the first two headers
-		local $/ = "\x00";
-    
-    	my $version = <$fh>;
-		my $read_size = <$fh>;
-	
-		#save the start position
-		CORE::print $fh ("0" x (length($self->{_data_length_}) - length($self->{_write_start_point_}) )) . $self->{_write_start_point_} ."\x00";
+        $self->update_headers();
 	}
 	
 	$self->{_closed_} = 1;
@@ -428,12 +461,12 @@ sub open_file {
         open($fh,"+>",$params{path}) || die "Cannot open file $params{path}";
 		CORE::binmode($fh,":unix");
 		#version number
-		CORE::print $fh "1"."\x00";
+		CORE::syswrite($fh,"1"."\x00");
 		#file size
-        CORE::print $fh $params{size} ."\x00";
+        CORE::syswrite($fh,$params{size} ."\x00");
 		#where is the start of the file
         $start_point = length($params{size}) * 2 + 2 + 2;
-        CORE::print $fh ("0" x (length($params{size}) - length($start_point) )) . $start_point ."\x00";
+        CORE::syswrite($fh,("0" x (length($params{size}) - length($start_point) )) . $start_point ."\x00");
 		$headers_size = length($params{size}) * 2 + 2 + 2;
 		$read_only = 0;
     }
@@ -441,7 +474,7 @@ sub open_file {
 		if ($params{mode} eq "append") {
 			open($fh,"+<",$params{path}) || die "Cannot open file $params{path}";
 			CORE::binmode($fh,":unix");
-			CORE::seek($fh,0,0);	
+			CORE::sysseek($fh,0,0);	
 			$read_only = 0;
 		}
 		elsif ($params{mode} eq "read") {
@@ -465,11 +498,87 @@ sub open_file {
 		$size =~ s/\x00//g;
 		$start_point =~ s/\x00//g;
 		
-		CORE::seek($fh,$start_point + 0,0);	
+		CORE::sysseek($fh,$start_point + 0,0);	
 	}
     
     return ($fh,$size + 0,$start_point + 0,$headers_size + 0,$read_only);
 }
+
+
+=head2 update_headers
+
+Update the start point in the headers section after a write command
+
+=cut
+sub update_headers {
+    my $self = shift;
+    
+    my $fh = $self->{_fh_};
+    
+    CORE::sysseek($fh,0, 0);
+    
+    my $headers = '';
+    #version
+    $headers .= "1\x00";
+	#file size
+    $headers .= $self->{_data_length_} ."\x00";
+    #start pos
+    $headers .= ("0" x (length($self->{_data_length_}) - length($self->{_write_start_point_}) )) . $self->{_write_start_point_} ."\x00";
+    
+    CORE::syswrite($fh,$headers);
+    
+    #go back to the previous position
+    CORE::sysseek($fh,$self->{_write_start_point_}, 0);
+}
+
+
+=head2 refresh
+
+Re-reads the headers from the file. Useful for tail
+
+=cut
+sub refresh {
+    my $self = shift;
+    
+    my $fh = $self->{_fh_};
+	
+    my $pos = $self->tell();
+    
+    CORE::sysseek($fh,0,0);
+    
+    local $/ = "\x00";
+    
+    #skip the first part of the header
+    my $version = <$fh>;
+    my $size = <$fh>;
+    
+    my $start_point =  <$fh>;
+    
+    my $headers_size = length($version) + length($size) + length($start_point);
+    
+    $size =~ s/\x00//g;
+    $start_point =~ s/\x00//g;
+    
+    $self->{_headers_size_} = $headers_size;
+    $self->{_read_start_point_} = $start_point + 0;
+    $self->{_data_length_} = $size + 0;
+    $self->{_file_length_} = $size + $headers_size;
+		
+	CORE::sysseek($fh,$start_point,0);	
+}
+
+=head2 sync_markers
+
+Sets the write market to the same position as the read marker
+
+=cut
+sub sync_markers {
+    my $self = shift;
+    
+    $self->{_write_start_point_} = $self->{_read_start_point_};
+    $self->{_read_started_} = 0;
+}
+
 
 =head2 jump
 
@@ -489,7 +598,7 @@ sub jump {
 		}		
 	}
 	
-	CORE::seek($self->{_fh_},$self->{_read_start_point_},0);
+	CORE::sysseek($self->{_fh_},$self->{_read_start_point_},0);
 }
 
 
@@ -527,10 +636,7 @@ sub seek {
 	my $position = $_[1];
 	my $whence = $_[2] || 0;
 	
-	if ($position > $self->{_file_length_}) {
-		warn "Attempt to seek beyond the end of file!";
-		return 0;
-	}
+	#$position = $position % $self->{_data_length_};
 	
 	if ($whence == 0) {
 		my $start_pos = $self->{_write_start_point_};
@@ -538,7 +644,7 @@ sub seek {
 			$position -= $self->{_file_length_} - $self->{_write_start_point_};
 			$start_pos = $self->{_headers_size_};
 		}
-		if ( CORE::seek($self->{_fh_},$position,1) ) {
+		if ( CORE::sysseek($self->{_fh_},$start_pos + $position,0) ) {
 			$self->{_read_start_point_} = $start_pos + $position;
 			return 1;
 		}
@@ -549,7 +655,7 @@ sub seek {
 			$position -= $self->{_file_length_} - $self->{_read_start_point_};
 			$start_pos = $self->{_headers_size_};
 		}
-		if ( CORE::seek($self->{_fh_},$position,1) ) {
+		if ( CORE::sysseek($self->{_fh_},$start_pos + $position,1) ) {
 			$self->{_read_start_point_} = $start_pos + $position;
 			return 1;
 		}
@@ -562,12 +668,19 @@ sub seek {
 		
 		my $start_pos = $self->{_write_start_point_};
 		if ($self->{_write_start_point_} + $position < $self->{_headers_size_}) {
-			$position += $self->{_write_start_point_} - $self->{_headers_size_};
+            $position = -$position;
+			$position -= $self->{_write_start_point_} - $self->{_headers_size_};
 			$start_pos = $self->{_file_length_};
 		}
 		
-		if ( CORE::seek($self->{_fh_},$start_pos,0) ) {
-			if ( CORE::seek($self->{_fh_},$position,1) ) {
+        #don't go in cicles
+        if ($self->{_read_start_point_} < $self->{_write_start_point_} &&  
+            $self->{_read_start_point_} + $position >= $self->{_write_start_point_}){
+                return 0;
+        }
+        
+		if ( CORE::sysseek($self->{_fh_},$start_pos,0) ) {
+			if ( CORE::sysseek($self->{_fh_},$position,1) ) {
 				$self->{_read_start_point_} = $start_pos + $position;
 				return 1;
 			}
@@ -601,7 +714,7 @@ sub tell {
 		$offset = ($self->{_file_length_} - $self->{_write_start_point_}) + 
 				  ($self->{_read_start_point_} - $self->{_headers_size_});
 	}
-	return $offset;
+	return $offset % $self->{_data_length_};
 }
 
 =head2 convert_size
@@ -800,11 +913,6 @@ L<http://cpanratings.perl.org/d/File-RoundRobin>
 L<http://search.cpan.org/dist/File-RoundRobin/>
 
 =back
-
-
-=head1 LIMITATIONS 
-
-The module does not support tailing of files as they are written to. 
 
 =head1 LICENSE AND COPYRIGHT
 

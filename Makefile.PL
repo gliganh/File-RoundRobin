@@ -12,9 +12,11 @@ WriteMakefile(
       ? ('LICENSE'=> 'perl')
       : ()),
     PL_FILES            => {},
-	EXE_FILES			=> ['bin/rrcat'],
+	EXE_FILES			=> ['bin/rrcat','bin/rrtail'],
     PREREQ_PM => {
         'Test::More' => 0,
+        'Getopt::Long' => 0,
+        'Time::HiRes' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'File-RoundRobin-*' },

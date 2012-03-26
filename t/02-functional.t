@@ -3,11 +3,11 @@
 use strict;
 use warnings;
 
-use Test::More tests => 15;
+use Test::More tests => 19;
 
 use_ok("File::RoundRobin");
 
-{ # create a new file , write something and read it back
+{ # create a new file , write something and read it back using write()
     
     my $rrfile = File::RoundRobin->new(path => 'test.txt',size => '1k');
     
@@ -19,7 +19,24 @@ use_ok("File::RoundRobin");
 	
 	my $buffer = $rrfile->read(7);
 	
-	is($buffer,"foo bar",'read returned text as expected');
+	is($buffer,"foo bar",'Read returned text as expected after write()');
+	
+	unlink('test.txt');
+}
+
+{ # create a new file , write something and read it back using print()
+    
+    my $rrfile = File::RoundRobin->new(path => 'test.txt',size => '1k');
+    
+    isa_ok($rrfile,'File::RoundRobin');
+    
+    ok($rrfile->print("foo bar"),'Print successful') ;
+
+	ok($rrfile->seek(-7),'seek works');
+	
+	my $buffer = $rrfile->read(7);
+	
+	is($buffer,"foo bar",'Read returned text as expected after print()');
 	
 	unlink('test.txt');
 }
