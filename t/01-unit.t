@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 13;
+use Test::More tests => 14;
 
 use_ok("File::RoundRobin");
 
@@ -15,10 +15,9 @@ use_ok("File::RoundRobin");
     is(File::RoundRobin::convert_size('10M'),10_000_000,'Mb test');
     is(File::RoundRobin::convert_size('12Gb'),12_000_000_000,'Gb test');
     
-    eval {
-        File::RoundRobin::convert_size('asdf');
-    };
-    like($@,qr/^Broke size format. See pod for accepted formats/,'Fails for broken size');
+    is(File::RoundRobin::convert_size('asdf'), undef, "invalid file size test");
+    
+    is($@,'Broke size format in File::RoundRobin->convert_size(). See pod for accepted formats','Fails for broken size');
     
 }
 
