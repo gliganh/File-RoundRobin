@@ -20,14 +20,15 @@ use_ok("File::RoundRobin");
 { # create a new file 
 
     my $temp_fh;
-    open($temp_fh, ">", 'test.txt');
+    open($temp_fh, ">", '05_2_test.txt');
     print $temp_fh "This is a simple text file\n";
     close($temp_fh);
 
-    my $rrfile = File::RoundRobin->new(path => 'test.txt',size => '1k', mode => 'append');
+    my $rrfile = File::RoundRobin->new(path => '05_2_test.txt',size => '1k', mode => 'append');
     
     is($rrfile,undef,'File failed to open in append mode');
     
     is($@, "File does not look like a File::RoundRobin file - missing headers", "Error correctly reported");
     
+    unlink('05_2_test.txt');
 }

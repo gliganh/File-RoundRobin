@@ -13,3 +13,5 @@ Revision history for File-RoundRobin
         Fixed: 
             - write() hijacks stdout via "select($self->{_fh_})" (https://rt.cpan.org/Public/Bug/Display.html?id=84614)
             - fixed bug where trying to open a file not created by File::RoundRobin would die without properly reporting the error (https://rt.cpan.org/Public/Bug/Display.html?id=84624)
+0.06    13/10/2017
+        Fixed failing tests due to reusing the same temp file name in all tests and tests running in paralel

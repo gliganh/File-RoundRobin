@@ -25,7 +25,7 @@ use_ok("File::RoundRobin");
 { #open new file
     
     my ($fh,$size,$start_point) = File::RoundRobin::open_file(
-                                                path => "test.txt",
+                                                path => "01_test.txt",
                                                 mode => 'new',
                                                 size => '1000'
                                     );
@@ -36,7 +36,7 @@ use_ok("File::RoundRobin");
     
     close($fh);
     
-    open($fh,"<",'test.txt');
+    open($fh,"<",'01_test.txt');
     
     local $/ = "\x00";
     
@@ -48,7 +48,7 @@ use_ok("File::RoundRobin");
 	is($read_size,"1000\x00",'File size 1000');
 	is($read_start_point,"0012\x00",'File start point correct');
     
-    unlink("text.txt");
+    unlink("01_text.txt");
            
 }
 
